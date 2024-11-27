@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全球人口构成可视化</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            margin: 0;
+            background-color: #f0f0f0;
+            padding-top: 20px;
+        }
+
+        svg {
+            width: 90vw;
+            height: 80vh;
+            border: 1px solid #ccc;
+            background-color: white;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        }
+
+        .start-button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        }
+
+        .active-button {
+            background-color: #4caf50;
+            color: white;
+        }
+
+        .dot {
+            stroke: white;
+            stroke-width: 1px;
+            opacity: 0.8;
+        }
+
+        .label {
+            font-size: 14px;
+            fill: black;
+            text-anchor: middle;
+        }
+    </style>
+</head>
+
+<body>
+<svg></svg>
+
+<div class="controls">
+    <button class="start-button active-button">无序状态</button>
+</div>
+
+<script>
+    const width = window.innerWidth * 0.9;
+    const height = window.innerHeight * 0.8;
+    let dotsData = [];
+    let interval;
+
+    const svg = d3.select("svg");
+
+    // 初始化随机点
+    function initializeRandomDots() {
+        dotsData = [];
+        for (let i = 0; i < 100; i++) {
+            dotsData.push({
+                x: Math.random() * width,
+                y: Math.random() * height
+            });
+        }
+
+        svg.selectAll(".dot")
+            .data(dotsData)
+            .enter()
+            .append("circle")
+            .attr("class", "dot")
+            .attr("r", 5)
+            .attr("cx", d => d.x)
+            .attr("cy", d => d.y)
+            .attr("fill", "blue");
+    }
+
+    // 随机移动点
+    function moveDots() {
+        dotsData.forEach(dot => {
+            const dx = (Math.random() - 0.5) * 600;
+            const dy = (Math.random() - 0.5) * 600;
+
+            dot.x = Math.max(5, Math.min(width - 5, dot.x + dx));
+            dot.y = Math.max(5, Math.min(height - 5, dot.y + dy));
+        });
+
+        svg.selectAll(".dot")
+            .data(dotsData)
+            .transition()
+            .duration(3000)
+            .ease(d3.easeLinear)
+            .attr("cx", d => d.x)
+            .attr("cy", d => d.y);
+    }
+
+    // 处理Excel数据
+    function processData(data) {
+        const processedData = {};
+        data.forEach(row => {
+            const category = row["Category"];
+            const subcategory = row["Subcategory"];
+            const value = +row["Value"];
+            if (!processedData[category]) {
+                processedData[category] = [];
+            }
+            processedData[category].push([subcategory, value]);
+        });
+        return processedData;
+    }
+
+    // 动态生成按钮
+    function initializeButtons(data) {
+        const controlsDiv = document.querySelector(".controls");
+        Object.keys(data).forEach(category => {
+            const button = document.createElement("button");
+            button.textContent = category;
+            button.addEventListener("click", () => {
+                changeButtonColor(button);
+                displayCategory(data, category);
+            });
+            controlsDiv.appendChild(button);
+        });
+    }
+
+    // 更新按钮颜色
+    function changeButtonColor(clickedButton) {
+        const buttons = document.querySelectorAll(".controls button");
+        buttons.forEach(button => {
+            button.classList.remove("active-button");
+        });
+        clickedButton.classList.add("active-button");
+    }
+
+    // 显示特定分类的数据
+    function displayCategory(data, category) {
+        clearInterval(interval); // 清除随机移动的定时器
+
+        const categoryData = data[category];
+        const categoryNames = categoryData.map(item => item[0]);
+        const categoryValues = categoryData.map(item => item[1]);
+
+        const requiredDots = categoryValues.reduce((sum, value) => sum + value, 0);
+        if (dotsData.length < requiredDots) {
+            for (let i = dotsData.length; i < requiredDots; i++) {
+                dotsData.push({ x: Math.random() * width, y: Math.random() * height });
+            }
+        }
+
+        const baseY = height * 0.6;
+        const regions = categoryNames.map((_, i) => ({
+            x: (width / (categoryValues.length + 1)) * (i + 1),
+            y: baseY
+        }));
+
+        let currentDotIndex = 0;
+        categoryValues.forEach((count, categoryIndex) => {
+            const region = regions[categoryIndex];
+            for (let i = 0; i < count; i++) {
+                const dot = dotsData[currentDotIndex];
+                const row = i % 10;
+                const col = Math.floor(i / 10);
+
+                dot.targetX = region.x - 45 + row * 10;
+                dot.targetY = baseY + 40 - col * 10;
+
+                currentDotIndex++;
+            }
+        });
+
+        svg.selectAll(".dot")
+            .data(dotsData)
+            .transition()
+            .duration(1500)
+            .ease(d3.easeCubicOut)
+            .attr("cx", d => {
+                d.x = d.targetX; // 更新起点
+                return d.targetX;
+            })
+            .attr("cy", d => {
+                d.y = d.targetY; // 更新起点
+                return d.targetY;
+            });
+
+        svg.selectAll(".label, .line").remove();
+        regions.forEach((region, i) => {
+            svg.append("line")
+                .attr("class", "line")
+                .attr("x1", region.x - 50)
+                .attr("x2", region.x + 50)
+                .attr("y1", baseY + 50)
+                .attr("y2", baseY + 50)
+                .attr("stroke", "black")
+                .attr("stroke-width", 1);
+
+            svg.append("text")
+                .attr("class", "label")
+                .attr("x", region.x)
+                .attr("y", baseY + 70)
+                .text(categoryNames[i]);
+        });
+    }
+
+    // 加载Excel文件
+    fetch("hundredPeople.xlsx")
+        .then(response => response.arrayBuffer())
+        .then(buffer => {
+            const workbook = XLSX.read(buffer, { type: "array" });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const data = XLSX.utils.sheet_to_json(sheet);
+            const processedData = processData(data);
+
+            initializeButtons(processedData);
+        })
+        .catch(error => console.error("Error reading file:", error));
+
+    // 初始化点
+    initializeRandomDots();
+    moveDots();
+    interval = setInterval(moveDots, 1000);
+
+    // 移动按钮点击事件
+    document.querySelector(".start-button").addEventListener("click", () => {
+        // 清除所有文字和线
+        svg.selectAll(".label").remove();
+        svg.selectAll(".line").remove();
+
+        const buttons = document.querySelectorAll(".controls button");
+        const buttonMove = document.querySelector(".start-button");
+        buttons.forEach(button => {
+            button.classList.remove("active-button");
+        });
+
+        clearInterval(interval);
+        moveDots(); // 立即开始移动
+        interval = setInterval(moveDots, 1000);
+
+        buttonMove.classList.add("active-button");
+    });
+</script>
+</body>
+
+</html>
